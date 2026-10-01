@@ -11,9 +11,9 @@ def _decode_name(value: bytes) -> str:
     return value.rstrip(b"\x00").decode("utf-8", errors="replace")
 
 
-def parse_pe(path: str) -> dict[str, Any]:
-    """Parse defensive metadata from a Windows PE file without executing it."""
-    pe = pefile.PE(path, fast_load=False)
+def parse_pe(data: bytes) -> dict[str, Any]:
+    """Parse defensive metadata from Windows PE bytes without executing them."""
+    pe = pefile.PE(data=data, fast_load=False)
 
     sections: list[dict[str, Any]] = []
     for section in pe.sections:
@@ -41,7 +41,7 @@ def parse_pe(path: str) -> dict[str, Any]:
                 )
             imports.append(
                 {
-                    "dll": entry.dll.decode("utf-8", errors="replace"),
+                    "dll": (entry.dll or b"").decode("utf-8", errors="replace"),
                     "functions": functions,
                 }
             )
