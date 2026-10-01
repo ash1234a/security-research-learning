@@ -116,6 +116,8 @@ pytest -q
 | `MZ` | `MZ` 시그니처는 있지만 유효한 PE가 아님 (오류는 `errors`에 기록) |
 | `unknown` | 그 외 |
 
+`pe` 객체에는 위 필드 외에 헤더 구조, Delay Import, Data Directory, TLS, Debug, relocation, resource, Rich Header, overlay, Authenticode 디렉터리 정보가 들어갑니다. 필드 설명은 [`docs/pe-parser.md`](../docs/pe-parser.md)에 있습니다.
+
 스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다.
 
 ## 주의
