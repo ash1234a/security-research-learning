@@ -22,8 +22,9 @@
   - writable + executable 섹션
   - 보안상 주목할 import
   - Authenticode blob 부재
-- JSON 보고서 출력
-- pytest 기반 기본 테스트
+- 손상·변조된 PE 입력에서도 중단 없이 `errors`에 기록
+- JSON 보고서 출력 (로컬 경로는 기록하지 않고 파일 이름만 기록)
+- pytest 테스트 + GitHub Actions CI
 
 > 이 도구는 파일을 실행하지 않는 정적 분석기입니다. 탐지 결과는 악성 여부의 확정 판정이 아니라 추가 분석을 위한 특징 정보입니다.
 
@@ -76,17 +77,21 @@ redblue-analyze sample.exe --json results/sample.json
 redblue-analyze sample.exe --string-limit 50
 ```
 
+종료 코드: `0` 성공, `2` 입력 오류(파일 없음·권한 없음·잘못된 옵션), `3` 보고서 저장 실패.
+
 ## 테스트
 
 ```bash
 pytest -q
 ```
 
+테스트에 필요한 PE 파일은 저장소에 넣지 않고 `tests/pe_builder.py`가 실행 코드 없는 최소 PE32 바이너리를 직접 만들어 사용합니다. 섹션 권한, 섹션 엔트로피, import, 서명 블롭 유무, 손상된 헤더를 각각 조작해 탐지 로직을 검증합니다.
+
 ## 보고서 예시
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "sample.exe",
   "size": 123456,
   "sha256": "...",
@@ -98,9 +103,20 @@ pytest -q
     "imports": [],
     "has_authenticode_blob": false
   },
+  "errors": [],
   "risk_features": []
 }
 ```
+
+`file_type` 값:
+
+| 값 | 의미 |
+| --- | --- |
+| `PE` | PE 파싱 성공 |
+| `MZ` | `MZ` 시그니처는 있지만 유효한 PE가 아님 (오류는 `errors`에 기록) |
+| `unknown` | 그 외 |
+
+스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다.
 
 ## 주의
 
