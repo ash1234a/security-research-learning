@@ -5,5 +5,5 @@ rule EICAR_Smoke_Test {
     strings:
         $eicar = "EICAR-STANDARD-ANTIVIRUS-TEST-FILE" ascii
     condition:
-        $eicar
+        $eicar at 0 and filesize < 128
 }
