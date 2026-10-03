@@ -9,6 +9,7 @@ description = "Defensive static-analysis MVP for an isolated AI red-vs-blue secu
 requires-python = ">=3.11"
 dependencies = [
   "pefile>=2024.8.26",
+  "yara-x>=1.19.0",
 ]
 
 [project.optional-dependencies]
@@ -16,6 +17,9 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 redblue-analyze = "analyzer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["analyzer*", "detection*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
