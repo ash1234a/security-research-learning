@@ -11,6 +11,12 @@ from .entropy import shannon_entropy
 from .pe_parser import parse_pe
 from .strings import extract_strings
 
+SCHEMA_VERSION = 2
+
+# 압축·암호화된 데이터는 대체로 7.2 bits/byte 이상으로 나타난다.
+# 정상 파일의 리소스(이미지 등)도 이 값을 넘을 수 있으므로 휴리스틱으로만 사용한다.
+HIGH_ENTROPY_THRESHOLD = 7.2
+
 SUSPICIOUS_IMPORTS = {
     "VirtualAlloc",
     "VirtualProtect",
@@ -41,7 +47,7 @@ def _flatten_imports(pe_info: dict[str, Any]) -> set[str]:
 def _risk_features(report: dict[str, Any]) -> list[dict[str, str]]:
     findings: list[dict[str, str]] = []
     entropy = report["entropy"]
-    if entropy >= 7.2:
+    if entropy >= HIGH_ENTROPY_THRESHOLD:
         findings.append({"severity": "medium", "feature": "high_file_entropy", "detail": f"entropy={entropy:.4f}"})
 
     pe_info = report.get("pe")
@@ -49,7 +55,7 @@ def _risk_features(report: dict[str, Any]) -> list[dict[str, str]]:
         return findings
 
     for section in pe_info.get("sections", []):
-        if section["entropy"] >= 7.2:
+        if section["entropy"] >= HIGH_ENTROPY_THRESHOLD:
             findings.append(
                 {
                     "severity": "medium",
@@ -82,33 +88,45 @@ def _risk_features(report: dict[str, Any]) -> list[dict[str, str]]:
     return findings
 
 
-def analyze_file(path: str | Path, string_limit: int = 200) -> dict[str, Any]:
-    file_path = Path(path)
-    if not file_path.is_file():
-        raise FileNotFoundError(file_path)
-
-    data = file_path.read_bytes()
+def analyze_bytes(data: bytes, name: str = "<memory>", string_limit: int = 200) -> dict[str, Any]:
+    """Analyze raw bytes. The data is never executed."""
     report: dict[str, Any] = {
-        "schema_version": 1,
-        "file": str(file_path),
-        "name": file_path.name,
+        "schema_version": SCHEMA_VERSION,
+        "name": name,
         "size": len(data),
         "sha256": _sha256(data),
         "entropy": round(shannon_entropy(data), 4),
-        "file_type": "PE" if data.startswith(b"MZ") else "unknown",
+        "file_type": "unknown",
         "strings": extract_strings(data, limit_each=string_limit),
         "pe": None,
         "errors": [],
     }
 
-    if report["file_type"] == "PE":
+    if data.startswith(b"MZ"):
+        # MZ 시그니처만으로는 유효한 PE라고 볼 수 없으므로 파싱에 성공했을 때만 "PE"로 표시한다.
+        report["file_type"] = "MZ"
         try:
-            report["pe"] = parse_pe(str(file_path))
+            report["pe"] = parse_pe(data)
+            report["file_type"] = "PE"
         except pefile.PEFormatError as exc:
             report["errors"].append(f"PE parse error: {exc}")
+        except Exception as exc:  # noqa: BLE001 — 손상·변조된 입력에서도 보고서는 끝까지 생성한다.
+            report["errors"].append(f"PE parse error ({type(exc).__name__}): {exc}")
 
     report["risk_features"] = _risk_features(report)
     return report
+
+
+def analyze_file(path: str | Path, string_limit: int = 200) -> dict[str, Any]:
+    """Analyze a file on disk without executing it.
+
+    보고서에는 파일 이름만 기록하고 로컬 절대 경로는 남기지 않는다.
+    """
+    file_path = Path(path)
+    if not file_path.is_file():
+        raise FileNotFoundError(file_path)
+
+    return analyze_bytes(file_path.read_bytes(), name=file_path.name, string_limit=string_limit)
 
 
 def report_to_json(report: dict[str, Any]) -> str:

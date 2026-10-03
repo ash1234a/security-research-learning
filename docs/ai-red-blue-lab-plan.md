@@ -199,35 +199,39 @@ Mean Detect Time: 1.1s
 
 ### Phase 0 — 프로젝트 기반
 
-- [ ] Python 프로젝트 구조 생성
-- [ ] 가상환경 및 의존성 관리
-- [ ] JSON 결과 스키마 정의
-- [ ] 테스트 폴더 구성
-- [ ] 안전 정책 문서 작성
+- [x] Python 프로젝트 구조 생성 (`ai-red-blue-lab/`, `pyproject.toml`)
+- [x] 가상환경 및 의존성 관리 (`pip install -e ".[dev]"`)
+- [ ] JSON 결과 스키마 정의 — 현재는 `schema_version` 필드만 있음, 정식 JSON Schema 문서는 미작성
+- [x] 테스트 폴더 구성 (pytest)
+- [x] CI 테스트 자동화 (GitHub Actions, Python 3.11–3.13)
+- [ ] 안전 정책 문서 작성 — 원칙은 §8에 있음, 별도 `safety.md`는 미작성
 - [ ] 라이선스 결정
 
 ### Phase 1 — 정적 분석기 MVP
 
 목표: 파일 하나를 입력하면 구조화된 분석 결과를 출력한다.
 
-- [ ] SHA-256 계산
-- [ ] 파일 형식 식별
-- [ ] PE 헤더 파싱
-- [ ] 섹션 분석
-- [ ] 문자열 추출
-- [ ] 엔트로피 계산
-- [ ] import 분석
-- [ ] 디지털 서명 확인
-- [ ] JSON 보고서 생성
-- [ ] 단위 테스트 작성
+- [x] SHA-256 계산
+- [x] 파일 형식 식별 (유효한 PE / MZ만 있음 / 기타 구분)
+- [x] PE 헤더 파싱
+- [x] 섹션 분석 (권한, 섹션별 엔트로피)
+- [x] 문자열 추출 (ASCII / UTF-16LE)
+- [x] 엔트로피 계산
+- [x] import 분석
+- [ ] 디지털 서명 확인 — 현재는 Authenticode 블롭 **존재 여부**만 확인, 서명 유효성 검증은 미구현
+- [x] JSON 보고서 생성
+- [x] 단위 테스트 작성 (테스트용 최소 PE를 코드로 생성해 PE 경로까지 검증)
+- [x] 손상된 PE 입력에서도 중단 없이 오류를 보고서에 기록
 
 완료 기준:
 
 ```bash
-python analyzer.py sample.exe --json report.json
+redblue-analyze sample.exe --json results/report.json
 ```
 
-한 명령으로 분석 보고서 생성.
+한 명령으로 분석 보고서 생성. → **달성**
+
+남은 항목은 서명 검증과 JSON Schema 문서화이며, 둘 다 Phase 2 진행에 필수는 아니다.
 
 ### Phase 2 — 탐지 규칙 엔진
 
@@ -290,6 +294,8 @@ AI는 결정자가 아니라 **규칙 후보를 제안하는 분석 보조자**�
 ---
 
 ## 6. 예상 폴더 구조
+
+> 현재 설계 문서는 저장소 루트의 `docs/`에 있고, 분석 결과(`results/`)와 샘플(`samples/`)은 `.gitignore`로 커밋 대상에서 제외한다.
 
 ```text
 ai-red-blue-lab/
