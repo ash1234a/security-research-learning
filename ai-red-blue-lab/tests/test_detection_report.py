@@ -18,10 +18,17 @@ rule report_marker {
 '''
 
 
-def test_report_has_empty_detections_without_engine() -> None:
+def test_report_marks_detection_as_not_run_without_engine() -> None:
     report = analyze_bytes(b"ordinary benign bytes")
 
     assert report["schema_version"] == 3
+    assert report["detections"] is None
+
+
+def test_report_has_empty_detections_after_zero_match_scan() -> None:
+    engine = YaraXEngine(RULE)
+    report = analyze_bytes(b"ordinary benign bytes", detection_engine=engine)
+
     assert report["detections"] == []
 
 
