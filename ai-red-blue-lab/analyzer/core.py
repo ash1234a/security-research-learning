@@ -99,7 +99,9 @@ def analyze_bytes(
     """Analyze raw bytes. The data is never executed.
 
     When a detection engine is supplied, rule matches are serialized into the
-    report. Keeping the engine optional preserves static-analysis-only callers.
+    report. ``detections`` is None when detection was not run and a list when
+    it was run, so downstream evaluation cannot mistake a skipped scan for a
+    true negative.
     """
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -111,7 +113,7 @@ def analyze_bytes(
         "strings": extract_strings(data, limit_each=string_limit),
         "pe": None,
         "errors": [],
-        "detections": [],
+        "detections": None,
     }
 
     if data.startswith(b"MZ"):
