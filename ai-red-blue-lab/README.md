@@ -110,7 +110,7 @@ pytest -q
 }
 ```
 
-`detections`는 탐지 엔진을 실행하지 않았으면 `null`, 실행했지만 일치 규칙이 없으면 `[]`, 규칙이 일치하면 규칙명·네임스페이스·메타데이터 객체 목록입니다. 이 구분은 후속 평가기가 미실행 샘플을 TN/FN으로 잘못 집계하지 않도록 유지합니다.
+`detections`는 탐지 엔진을 실행하지 않았거나 탐지 단계가 오류로 완료되지 못했으면 `null`, 실행을 정상 완료했지만 일치 규칙이 없으면 `[]`, 규칙이 일치하면 규칙명·네임스페이스·메타데이터 객체 목록입니다. 탐지 오류의 원인은 `errors`에 기록합니다. 이 구분은 후속 평가기가 미실행·실패 샘플을 TN/FN으로 잘못 집계하지 않도록 유지합니다.
 
 `file_type` 값:
 
@@ -122,7 +122,7 @@ pytest -q
 
 `pe` 객체에는 위 필드 외에 헤더 구조, Delay Import, Data Directory, TLS, Debug, relocation, resource, Rich Header, overlay, Authenticode 디렉터리 정보가 들어갑니다. 필드 설명은 [`docs/pe-parser.md`](../docs/pe-parser.md)에 있습니다.
 
-스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다. v3에서 `detections`를 추가해 탐지 미실행(`null`)과 스캔 후 일치 없음(`[]`)을 구분합니다.
+스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다. v3에서 `detections`를 추가해 탐지 미실행·실패(`null`)과 스캔 후 일치 없음(`[]`)을 구분합니다.
 
 ## 주의
 
