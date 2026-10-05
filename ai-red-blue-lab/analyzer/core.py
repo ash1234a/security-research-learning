@@ -99,9 +99,9 @@ def analyze_bytes(
     """Analyze raw bytes. The data is never executed.
 
     When a detection engine is supplied, rule matches are serialized into the
-    report. ``detections`` is None when detection was not run and a list when
-    it was run, so downstream evaluation cannot mistake a skipped scan for a
-    true negative.
+    report. ``detections`` is None when detection was not run or failed and a
+    list when it completed, so downstream evaluation cannot mistake a skipped
+    or failed scan for a true negative.
     """
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -129,7 +129,10 @@ def analyze_bytes(
 
     report["risk_features"] = _risk_features(report)
     if detection_engine is not None:
-        report["detections"] = [match.to_dict() for match in detection_engine.scan(data)]
+        try:
+            report["detections"] = [match.to_dict() for match in detection_engine.scan(data)]
+        except Exception as exc:  # noqa: BLE001 — 한 샘플의 탐지 실패가 평가 배치를 중단시키지 않는다.
+            report["errors"].append(f"detection error ({type(exc).__name__}): {exc}")
     return report
 
 
