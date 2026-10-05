@@ -18,6 +18,11 @@ rule report_marker {
 '''
 
 
+class FailingDetectionEngine:
+    def scan(self, data: bytes) -> list[object]:
+        raise RuntimeError("synthetic scan failure")
+
+
 def test_report_marks_detection_as_not_run_without_engine() -> None:
     report = analyze_bytes(b"ordinary benign bytes")
 
@@ -44,3 +49,11 @@ def test_report_serializes_engine_matches() -> None:
         }
     ]
     assert json.loads(report_to_json(report))["detections"] == report["detections"]
+
+
+def test_report_is_preserved_when_detection_scan_fails() -> None:
+    report = analyze_bytes(b"ordinary benign bytes", detection_engine=FailingDetectionEngine())  # type: ignore[arg-type]
+
+    assert report["detections"] is None
+    assert report["errors"] == ["detection error (RuntimeError): synthetic scan failure"]
+    assert report["sha256"]
