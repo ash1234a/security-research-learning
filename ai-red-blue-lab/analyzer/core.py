@@ -7,7 +7,7 @@ from typing import Any
 
 import pefile
 
-from detection.yara_x_engine import YaraXEngine
+from detection.protocol import DetectionEngine
 
 from .entropy import shannon_entropy
 from .pe_parser import parse_pe
@@ -94,7 +94,7 @@ def analyze_bytes(
     data: bytes,
     name: str = "<memory>",
     string_limit: int = 200,
-    detection_engine: YaraXEngine | None = None,
+    detection_engine: DetectionEngine | None = None,
 ) -> dict[str, Any]:
     """Analyze raw bytes. The data is never executed.
 
@@ -139,7 +139,7 @@ def analyze_bytes(
 def analyze_file(
     path: str | Path,
     string_limit: int = 200,
-    detection_engine: YaraXEngine | None = None,
+    detection_engine: DetectionEngine | None = None,
 ) -> dict[str, Any]:
     """Analyze a file on disk without executing it.
 
