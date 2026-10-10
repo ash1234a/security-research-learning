@@ -2,7 +2,7 @@
 
 격리된 환경에서 정적 분석과 탐지 자동화를 실험하기 위한 방어 연구 프로젝트입니다.
 
-현재 상태: **Phase 1 — Static Analyzer MVP**
+현재 상태: **Phase 1 — Static Analyzer MVP + Phase 2 탐지 엔진 연결 진행 중**
 
 ## 현재 구현 기능
 
@@ -23,6 +23,7 @@
   - 보안상 주목할 import
   - Authenticode blob 부재
 - 손상·변조된 PE 입력에서도 중단 없이 `errors`에 기록
+- YARA-X 규칙 컴파일·스캔 및 엔진 독립 탐지 결과
 - JSON 보고서 출력 (로컬 경로는 기록하지 않고 파일 이름만 기록)
 - pytest 테스트 + GitHub Actions CI
 
@@ -91,7 +92,7 @@ pytest -q
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name": "sample.exe",
   "size": 123456,
   "sha256": "...",
@@ -104,9 +105,12 @@ pytest -q
     "has_authenticode_blob": false
   },
   "errors": [],
-  "risk_features": []
+  "risk_features": [],
+  "detections": null
 }
 ```
+
+`detections`는 탐지 엔진을 실행하지 않았거나 탐지 단계가 오류로 완료되지 못했으면 `null`, 실행을 정상 완료했지만 일치 규칙이 없으면 `[]`, 규칙이 일치하면 규칙명·네임스페이스·메타데이터 객체 목록입니다. 탐지 오류의 원인은 `errors`에 기록합니다. 이 구분은 후속 평가기가 미실행·실패 샘플을 TN/FN으로 잘못 집계하지 않도록 유지합니다.
 
 `file_type` 값:
 
@@ -118,18 +122,18 @@ pytest -q
 
 `pe` 객체에는 위 필드 외에 헤더 구조, Delay Import, Data Directory, TLS, Debug, relocation, resource, Rich Header, overlay, Authenticode 디렉터리 정보가 들어갑니다. 필드 설명은 [`docs/pe-parser.md`](../docs/pe-parser.md)에 있습니다.
 
-스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다.
+스키마 변경 이력: v2에서 로컬 절대 경로를 담던 `file` 필드를 제거하고 `file_type`에 `MZ`를 추가했습니다. v3에서 `detections`를 추가해 탐지 미실행·실패(`null`)과 스캔 후 일치 없음(`[]`)을 구분합니다.
 
 ## 주의
 
 - 실제 악성 샘플은 이 GitHub 저장소에 업로드하지 않습니다.
-- 현재 버전은 정적 분석만 수행하며 샘플을 실행하지 않습니다.
+- 현재 버전은 정적 분석과 정적 탐지만 수행하며 샘플을 실행하지 않습니다.
 - 향후 동적 분석 기능은 별도 격리 VM에서만 구현합니다.
 - `risk_features`는 휴리스틱 정보이며 악성 판정기가 아닙니다.
 
 ## 다음 단계
 
-1. YARA/YARA-X 연동
+1. YARA/YARA-X 탐지 결과 보고서 연결 완료
 2. 테스트용 정상 파일 데이터셋 구성
 3. 규칙별 탐지/오탐 평가기
 4. AI 기반 분석 보고서 및 탐지 규칙 후보 생성

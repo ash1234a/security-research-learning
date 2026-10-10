@@ -7,11 +7,13 @@ from typing import Any
 
 import pefile
 
+from detection.yara_x_engine import YaraXEngine
+
 from .entropy import shannon_entropy
 from .pe_parser import parse_pe
 from .strings import extract_strings
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # 압축·암호화된 데이터는 대체로 7.2 bits/byte 이상으로 나타난다.
 # 정상 파일의 리소스(이미지 등)도 이 값을 넘을 수 있으므로 휴리스틱으로만 사용한다.
@@ -88,8 +90,19 @@ def _risk_features(report: dict[str, Any]) -> list[dict[str, str]]:
     return findings
 
 
-def analyze_bytes(data: bytes, name: str = "<memory>", string_limit: int = 200) -> dict[str, Any]:
-    """Analyze raw bytes. The data is never executed."""
+def analyze_bytes(
+    data: bytes,
+    name: str = "<memory>",
+    string_limit: int = 200,
+    detection_engine: YaraXEngine | None = None,
+) -> dict[str, Any]:
+    """Analyze raw bytes. The data is never executed.
+
+    When a detection engine is supplied, rule matches are serialized into the
+    report. ``detections`` is None when detection was not run or failed and a
+    list when it completed, so downstream evaluation cannot mistake a skipped
+    or failed scan for a true negative.
+    """
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "name": name,
@@ -100,6 +113,7 @@ def analyze_bytes(data: bytes, name: str = "<memory>", string_limit: int = 200) 
         "strings": extract_strings(data, limit_each=string_limit),
         "pe": None,
         "errors": [],
+        "detections": None,
     }
 
     if data.startswith(b"MZ"):
@@ -114,10 +128,19 @@ def analyze_bytes(data: bytes, name: str = "<memory>", string_limit: int = 200) 
             report["errors"].append(f"PE parse error ({type(exc).__name__}): {exc}")
 
     report["risk_features"] = _risk_features(report)
+    if detection_engine is not None:
+        try:
+            report["detections"] = [match.to_dict() for match in detection_engine.scan(data)]
+        except Exception as exc:  # noqa: BLE001 — 한 샘플의 탐지 실패가 평가 배치를 중단시키지 않는다.
+            report["errors"].append(f"detection error ({type(exc).__name__}): {exc}")
     return report
 
 
-def analyze_file(path: str | Path, string_limit: int = 200) -> dict[str, Any]:
+def analyze_file(
+    path: str | Path,
+    string_limit: int = 200,
+    detection_engine: YaraXEngine | None = None,
+) -> dict[str, Any]:
     """Analyze a file on disk without executing it.
 
     보고서에는 파일 이름만 기록하고 로컬 절대 경로는 남기지 않는다.
@@ -126,7 +149,12 @@ def analyze_file(path: str | Path, string_limit: int = 200) -> dict[str, Any]:
     if not file_path.is_file():
         raise FileNotFoundError(file_path)
 
-    return analyze_bytes(file_path.read_bytes(), name=file_path.name, string_limit=string_limit)
+    return analyze_bytes(
+        file_path.read_bytes(),
+        name=file_path.name,
+        string_limit=string_limit,
+        detection_engine=detection_engine,
+    )
 
 
 def report_to_json(report: dict[str, Any]) -> str:
