@@ -94,17 +94,19 @@ pytest -q
 
 ```python
 from detection.yara_x_engine import YaraXEngine
-from evaluation import evaluate, load_manifest, scan_samples
+from evaluation import evaluate, load_manifest, rule_names_from_source, scan_samples
 
 manifest = load_manifest("manifest.csv")
 outcome = scan_samples(YaraXEngine(rule_source), samples)  # samples: (sha256, bytes) 목록
-result = evaluate(manifest, outcome.predictions)
+result = evaluate(manifest, outcome.predictions, rule_names_from_source(rule_source))
 print(result.to_dict())
 ```
 
 - 규칙별 TP/FP/FN/TN, precision, recall, 정상 파일 오탐률(`benign_fp_rate`)과 "어느 규칙이든 발화"(`__any__`) 전체 지표를 냅니다.
-- `eicar`, `amtso` 출처는 집계에서 빼고 발화 확인(pass/fail)으로만 보고합니다.
-- 스캔 예외는 샘플별로 격리해 `scan_failures`로, 예측이 없는 항목은 `missing`으로 따로 셉니다.
+- 규칙 목록은 필수 입력입니다. 한 번도 발화하지 않은 규칙도 결과에 남아 FN/recall을 볼 수 있습니다.
+- `eicar`, `amtso` 출처는 집계에서 빼고 발화 확인(pass/fail)으로만 보고합니다. `eicar`는 `EICAR_Smoke_Test`가 발화해야 통과(`criterion: expected-rules`)이고, 기대 규칙이 정해지지 않은 출처(`amtso`)는 아무 규칙 발화 여부만 봅니다(`criterion: any-rule`).
+- 스캔 예외는 샘플별로 격리해 `scan_failures`로(smoke 포함), 예측이 없는 항목은 `missing`으로 따로 셉니다.
+- `scan_samples()`는 샘플별 `scan()` 소요 시간(`scan_seconds`, 초)을 기록합니다. 실패한 샘플도 포함합니다.
 - 분모가 0인 비율은 `null`입니다(측정하지 않은 값을 0으로 쓰지 않음).
 - 평가기는 (예측, 라벨) 쌍만 받으므로 피처 데이터셋(EMBER 등)의 예측도 같은 방식으로 평가할 수 있습니다.
 
@@ -155,7 +157,7 @@ print(result.to_dict())
 
 1. YARA/YARA-X 탐지 결과 보고서 연결 완료
 2. 테스트용 정상 파일 데이터셋 구성 완료 (pip 내장 정상 PE)
-3. 규칙별 탐지/오탐 평가기 완료 (매니페스트 로더 포함)
+3. 규칙별 탐지/오탐 평가기 라이브러리 완료 (매니페스트 로더, 샘플별 스캔 시간 포함). CLI와 EMBER/BODMAS 예측 연결은 남음
 4. AI 기반 분석 보고서 및 탐지 규칙 후보 생성
 5. 격리형 블루팀/레드팀 시뮬레이션
 

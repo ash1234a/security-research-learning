@@ -8,10 +8,14 @@
 - ``source``가 SMOKE_SOURCES(eicar, amtso)인 항목은 집계에서 빼고
   발화 확인(pass/fail)으로만 보고한다(안건 4 합의).
 - 분모가 0인 비율은 0이 아니라 ``None``으로 둔다(측정하지 않은 값을 숫자로 쓰지 않기 위해).
+- 평가할 규칙 목록은 필수 입력이다. 발화 결과에서만 규칙을 모으면 한 번도
+  발화하지 않은 규칙이 결과에서 빠져 FN/recall을 볼 수 없기 때문이다(PR #14 GPT 리뷰).
 """
 
 from __future__ import annotations
 
+import re
+import time
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
@@ -19,6 +23,24 @@ from typing import Any, Protocol
 from .manifest import ManifestEntry
 
 ANY_RULE = "__any__"
+
+# smoke 출처별로 반드시 발화해야 하는 규칙. 여기에 없는 출처는 "아무 규칙이나 발화"로만
+# 판정하고 결과의 ``criterion``에 ``any-rule``로 그 한계를 표시한다.
+SMOKE_EXPECTED_RULES: Mapping[str, frozenset[str]] = {"eicar": frozenset({"EICAR_Smoke_Test"})}
+
+_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+_LINE_COMMENT = re.compile(r"//[^\n]*")
+_RULE_DECL = re.compile(r"^\s*(?:(?:private|global)\s+)*rule\s+([A-Za-z_]\w*)", re.M)
+
+
+def rule_names_from_source(source: str) -> list[str]:
+    """YARA 규칙 소스에서 선언된 규칙 이름을 순서대로 뽑는다(주석 제외).
+
+    yara-x Python API는 컴파일된 규칙 목록을 열거하지 않으므로 소스에서 읽는다.
+    """
+
+    text = _LINE_COMMENT.sub("", _BLOCK_COMMENT.sub("", source))
+    return _RULE_DECL.findall(text)
 
 
 class _Match(Protocol):
@@ -33,6 +55,12 @@ class _Engine(Protocol):
 class ScanOutcome:
     predictions: dict[str, frozenset[str] | None]
     errors: dict[str, str]
+    # 샘플별 scan() 소요 시간(초, time.perf_counter). 실패한 샘플도 기록한다.
+    scan_seconds: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def total_scan_seconds(self) -> float:
+        return sum(self.scan_seconds.values())
 
 
 def scan_samples(engine: _Engine, samples: Iterable[tuple[str, bytes]]) -> ScanOutcome:
@@ -44,7 +72,9 @@ def scan_samples(engine: _Engine, samples: Iterable[tuple[str, bytes]]) -> ScanO
 
     predictions: dict[str, frozenset[str] | None] = {}
     errors: dict[str, str] = {}
+    seconds: dict[str, float] = {}
     for sha256, data in samples:
+        start = time.perf_counter()
         try:
             matches = engine.scan(data)
         except Exception as exc:  # noqa: BLE001 - 샘플 하나의 실패가 평가 전체를 멈추면 안 된다
@@ -52,7 +82,9 @@ def scan_samples(engine: _Engine, samples: Iterable[tuple[str, bytes]]) -> ScanO
             errors[sha256] = f"{type(exc).__name__}: {exc}"
         else:
             predictions[sha256] = frozenset(m.rule for m in matches)
-    return ScanOutcome(predictions=predictions, errors=errors)
+        finally:
+            seconds[sha256] = time.perf_counter() - start
+    return ScanOutcome(predictions=predictions, errors=errors, scan_seconds=seconds)
 
 
 def _ratio(num: int, den: int) -> float | None:
@@ -93,10 +125,21 @@ class SmokeCheck:
     source: str
     expected_fire: bool
     fired_rules: tuple[str, ...] | None  # None = 스캔 실패
+    expected_rules: tuple[str, ...] = ()
+
+    @property
+    def criterion(self) -> str:
+        """``expected-rules``: 기대 규칙이 모두 발화해야 통과. ``any-rule``: 발화 여부만 본다."""
+
+        return "expected-rules" if self.expected_rules and self.expected_fire else "any-rule"
 
     @property
     def passed(self) -> bool:
-        return self.fired_rules is not None and bool(self.fired_rules) == self.expected_fire
+        if self.fired_rules is None:
+            return False
+        if self.criterion == "expected-rules":
+            return set(self.expected_rules) <= set(self.fired_rules)
+        return bool(self.fired_rules) == self.expected_fire
 
 
 @dataclass
@@ -125,6 +168,8 @@ class EvaluationResult:
                     "sha256": s.sha256,
                     "source": s.source,
                     "expected_fire": s.expected_fire,
+                    "criterion": s.criterion,
+                    "expected_rules": list(s.expected_rules),
                     "fired_rules": None if s.fired_rules is None else list(s.fired_rules),
                     "passed": s.passed,
                 }
@@ -138,13 +183,20 @@ class EvaluationResult:
 def evaluate(
     manifest: Iterable[ManifestEntry],
     predictions: Mapping[str, Iterable[str] | None],
-    rules: Iterable[str] = (),
+    rules: Iterable[str],
+    *,
+    smoke_expected_rules: Mapping[str, Iterable[str]] = SMOKE_EXPECTED_RULES,
 ) -> EvaluationResult:
     """매니페스트와 예측으로 규칙별 지표를 계산한다.
 
-    ``rules``에 준 규칙은 한 번도 발화하지 않아도 결과에 포함된다(FN만 있는 규칙을 드러내기 위해).
+    ``rules``(필수)의 모든 규칙이 한 번도 발화하지 않아도 결과에 포함된다. YARA 소스라면
+    ``rule_names_from_source()``로 얻는다. 목록에 없는 규칙이 발화하면 그 규칙도 더한다.
     ``ANY_RULE`` 항목은 "어느 규칙이든 하나라도 발화"를 탐지로 본 전체 지표다.
+    smoke 항목의 스캔 실패도 ``scan_failures``에 포함한다.
     """
+
+    if isinstance(rules, str):
+        raise TypeError("rules는 규칙 이름 목록이어야 한다(문자열 하나가 아님)")
 
     entries = list(manifest)
     preds: dict[str, frozenset[str] | None] = {
@@ -176,8 +228,11 @@ def evaluate(
                     source=e.source,
                     expected_fire=e.label == "malicious",
                     fired_rules=None if fired is None else tuple(sorted(fired)),
+                    expected_rules=tuple(sorted(smoke_expected_rules.get(e.source, ()))),
                 )
             )
+            if fired is None:
+                failures.append(e.sha256)
             continue
         if fired is None:
             failures.append(e.sha256)
