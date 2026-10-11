@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .yara_x_engine import RuleMatch
+from .types import RuleMatch
 
 
 class DetectionEngine(Protocol):
