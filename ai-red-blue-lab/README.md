@@ -88,6 +88,26 @@ pytest -q
 
 테스트에 필요한 PE 파일은 저장소에 넣지 않고 `tests/pe_builder.py`가 실행 코드 없는 최소 PE32 바이너리를 직접 만들어 사용합니다. 섹션 권한, 섹션 엔트로피, import, 서명 블롭 유무, 손상된 헤더를 각각 조작해 탐지 로직을 검증합니다.
 
+## 규칙 평가 (매니페스트 + 평가기)
+
+매니페스트는 샘플 파일 없이 `sha256,label,family,source` 4개 열만 기록하는 CSV입니다. `label`은 `malicious`/`benign`, `source`는 `synthetic`, `pip-benign`, `eicar`, `amtso`, `ember2018`, `bodmas` 중 하나입니다.
+
+```python
+from detection.yara_x_engine import YaraXEngine
+from evaluation import evaluate, load_manifest, scan_samples
+
+manifest = load_manifest("manifest.csv")
+outcome = scan_samples(YaraXEngine(rule_source), samples)  # samples: (sha256, bytes) 목록
+result = evaluate(manifest, outcome.predictions)
+print(result.to_dict())
+```
+
+- 규칙별 TP/FP/FN/TN, precision, recall, 정상 파일 오탐률(`benign_fp_rate`)과 "어느 규칙이든 발화"(`__any__`) 전체 지표를 냅니다.
+- `eicar`, `amtso` 출처는 집계에서 빼고 발화 확인(pass/fail)으로만 보고합니다.
+- 스캔 예외는 샘플별로 격리해 `scan_failures`로, 예측이 없는 항목은 `missing`으로 따로 셉니다.
+- 분모가 0인 비율은 `null`입니다(측정하지 않은 값을 0으로 쓰지 않음).
+- 평가기는 (예측, 라벨) 쌍만 받으므로 피처 데이터셋(EMBER 등)의 예측도 같은 방식으로 평가할 수 있습니다.
+
 ## 보고서 예시
 
 ```json
@@ -134,8 +154,8 @@ pytest -q
 ## 다음 단계
 
 1. YARA/YARA-X 탐지 결과 보고서 연결 완료
-2. 테스트용 정상 파일 데이터셋 구성
-3. 규칙별 탐지/오탐 평가기
+2. 테스트용 정상 파일 데이터셋 구성 완료 (pip 내장 정상 PE)
+3. 규칙별 탐지/오탐 평가기 완료 (매니페스트 로더 포함)
 4. AI 기반 분석 보고서 및 탐지 규칙 후보 생성
 5. 격리형 블루팀/레드팀 시뮬레이션
 
