@@ -110,6 +110,17 @@ print(result.to_dict())
 - 분모가 0인 비율은 `null`입니다(측정하지 않은 값을 0으로 쓰지 않음).
 - 평가기는 (예측, 라벨) 쌍만 받으므로 피처 데이터셋(EMBER 등)의 예측도 같은 방식으로 평가할 수 있습니다.
 
+### 평가 CLI
+
+```bash
+redblue-evaluate --manifest manifest.csv --rules rules --samples /path/to/samples --json results/metrics.json
+```
+
+- 샘플 디렉터리를 재귀로 훑어 파일마다 SHA-256을 계산하고, 매니페스트에 있는 해시만 스캔합니다. 파일 이름은 보지 않습니다. 샘플은 읽기만 하고 실행하지 않습니다.
+- 규칙 목록은 `--rules` 디렉터리의 `.yar` 소스 전체에서 읽습니다(`YaraXEngine.from_directory()`와 같은 `read_rule_directory()` 사용).
+- 출력 JSON은 평가기 결과에 `inputs`(매니페스트 항목 수, 규칙 목록, 샘플 파일 수, 매니페스트에 없는 파일 수), `scan_errors`, `timing`(총·샘플별 스캔 시간)을 더합니다. 디렉터리에 없는 매니페스트 항목은 `missing`입니다.
+- 종료 코드: `0` 성공, `1` `--fail-on-smoke`일 때 smoke 확인 실패, `2` 입력 오류(매니페스트 형식, 경로, 규칙 컴파일), `3` 출력 파일 쓰기 실패.
+
 ## 보고서 예시
 
 ```json
@@ -157,7 +168,7 @@ print(result.to_dict())
 
 1. YARA/YARA-X 탐지 결과 보고서 연결 완료
 2. 테스트용 정상 파일 데이터셋 구성 완료 (pip 내장 정상 PE)
-3. 규칙별 탐지/오탐 평가기 라이브러리 완료 (매니페스트 로더, 샘플별 스캔 시간 포함). CLI와 EMBER/BODMAS 예측 연결은 남음
+3. 규칙별 탐지/오탐 평가기 완료 (매니페스트 로더, 규칙 디렉터리 로딩, 샘플별 스캔 시간, `redblue-evaluate` CLI). EMBER/BODMAS 예측 연결은 남음
 4. AI 기반 분석 보고서 및 탐지 규칙 후보 생성
 5. 격리형 블루팀/레드팀 시뮬레이션
 

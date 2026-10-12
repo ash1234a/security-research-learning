@@ -6,7 +6,7 @@ import yara_x
 
 from .types import RuleMatch
 
-__all__ = ["RuleMatch", "YaraXEngine", "validate_rule_source"]
+__all__ = ["RuleMatch", "YaraXEngine", "read_rule_directory", "validate_rule_source"]
 
 
 class YaraXEngine:
@@ -26,17 +26,7 @@ class YaraXEngine:
         All files are compiled together, so invalid rules and duplicate rule
         identifiers fail at construction time rather than during scanning.
         """
-        root = Path(directory)
-        if not root.is_dir():
-            raise NotADirectoryError(f"YARA rule directory does not exist: {root}")
-
-        paths = sorted(path for path in root.rglob("*.yar") if path.is_file())
-        if not paths:
-            raise ValueError(f"YARA rule directory contains no .yar files: {root}")
-
-        # Separate declarations even when a source file has no trailing newline.
-        source = "\n".join(path.read_text(encoding="utf-8") for path in paths)
-        return cls(source)
+        return cls(read_rule_directory(directory))
 
     def scan(self, data: bytes) -> list[RuleMatch]:
         results = self._rules.scan(data)
@@ -56,3 +46,22 @@ def validate_rule_source(source: str) -> None:
     """Raise yara_x.CompileError when rule source is invalid."""
 
     yara_x.compile(source)
+
+
+def read_rule_directory(directory: str | Path) -> str:
+    """Return the combined source of all .yar files under ``directory``.
+
+    Files are read recursively in sorted path order and joined with newlines so
+    a file without a trailing newline cannot merge into the next declaration.
+    ``YaraXEngine.from_directory`` and the evaluation CLI share this so the
+    compiled rules and the evaluated rule-name list come from the same source.
+    """
+    root = Path(directory)
+    if not root.is_dir():
+        raise NotADirectoryError(f"YARA rule directory does not exist: {root}")
+
+    paths = sorted(path for path in root.rglob("*.yar") if path.is_file())
+    if not paths:
+        raise ValueError(f"YARA rule directory contains no .yar files: {root}")
+
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
