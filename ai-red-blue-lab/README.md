@@ -118,8 +118,8 @@ redblue-evaluate --manifest manifest.csv --rules rules --samples /path/to/sample
 
 - 샘플 디렉터리를 재귀로 훑어 파일마다 SHA-256을 계산하고, 매니페스트에 있는 해시만 스캔합니다. 파일 이름은 보지 않습니다. 샘플은 읽기만 하고 실행하지 않습니다.
 - 규칙 목록은 `--rules` 디렉터리의 `.yar` 소스 전체에서 읽습니다(`YaraXEngine.from_directory()`와 같은 `read_rule_directory()` 사용).
-- 출력 JSON은 평가기 결과에 `inputs`(매니페스트 항목 수, 규칙 목록, 샘플 파일 수, 매니페스트에 없는 파일 수), `scan_errors`, `timing`(총·샘플별 스캔 시간)을 더합니다. 디렉터리에 없는 매니페스트 항목은 `missing`입니다.
-- 종료 코드: `0` 성공, `1` `--fail-on-smoke`일 때 smoke 확인 실패, `2` 입력 오류(매니페스트 형식, 경로, 규칙 컴파일), `3` 출력 파일 쓰기 실패.
+- 출력 JSON은 평가기 결과에 `inputs`(매니페스트 항목 수, 규칙 목록, 디스크의 샘플 파일 수 `sample_files`, 고유 SHA-256 수 `unique_samples`, 매니페스트에 없는 파일 수 `unlisted_files`), `scan_errors`, `timing`(총·샘플별 스캔 시간)을 더합니다. 디렉터리에 없는 매니페스트 항목은 `missing`입니다.
+- 종료 코드: `0` 성공, `1` `--fail-on-smoke`일 때 smoke 확인 실패, `2` 입력 오류(매니페스트 형식, 경로, 규칙 컴파일, 읽기 권한 없음 등 `OSError`), `3` 출력 파일 쓰기 실패.
 
 ## 보고서 예시
 

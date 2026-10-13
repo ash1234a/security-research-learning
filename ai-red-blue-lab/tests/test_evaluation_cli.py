@@ -79,6 +79,7 @@ def test_writes_metrics_json_matched_by_hash(lab: dict[str, Path]) -> None:
     }
     assert report["missing"] == ["0" * 64]
     assert report["inputs"]["sample_files"] == 3
+    assert report["inputs"]["unique_samples"] == 3
     assert report["inputs"]["unlisted_files"] == 1
     # 규칙 디렉터리의 모든 규칙이 발화 여부와 상관없이 결과에 있다.
     assert {"EICAR_Smoke_Test", "Never_Fires_Test"} <= set(report["inputs"]["rules"])
@@ -163,3 +164,28 @@ def test_index_samples_keeps_first_path_for_duplicate_content(tmp_path: Path) ->
     (tmp_path / "b").write_bytes(b"same")
     (tmp_path / "a").write_bytes(b"same")
     assert index_samples(tmp_path) == {_sha(b"same"): tmp_path / "a"}
+
+
+def test_sample_files_counts_duplicates_separately(lab: dict[str, Path]) -> None:
+    # 내용이 같은 파일: 디스크 파일 수와 고유 SHA-256 수가 갈린다. 스캔은 한 번만 한다.
+    (lab["samples"] / "copy-of-eicar.txt").write_bytes(EICAR)
+    (lab["samples"] / "unlisted-copy.bin").write_bytes(b"not in manifest")
+    out = lab["out"] / "dup.json"
+    assert main(_args(lab, "--json", str(out))) == EXIT_OK
+    inputs = json.loads(out.read_text(encoding="utf-8"))["inputs"]
+    assert (inputs["sample_files"], inputs["unique_samples"], inputs["unlisted_files"]) == (5, 3, 2)
+
+
+def test_unreadable_input_is_input_error(
+    lab: dict[str, Path], monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # root로 도는 CI에서는 chmod로 읽기를 막을 수 없어 읽기 함수에서 PermissionError를 낸다.
+    from evaluation import cli
+
+    def deny(path: Path) -> str:
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(cli, "_sha256_file", deny)
+    assert main(_args(lab)) == EXIT_INPUT_ERROR
+    err = capsys.readouterr().err
+    assert "could not read input" in err and "Permission denied" in err
