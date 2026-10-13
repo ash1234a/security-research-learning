@@ -4,11 +4,12 @@
 
 - 샘플 디렉터리의 파일을 재귀로 찾아 SHA-256을 계산하고, 매니페스트에 있는 해시만 스캔한다.
   파일 이름은 보지 않는다. 매니페스트에 없는 파일은 읽지만 스캔하지 않는다(``unlisted_files``).
+- ``sample_files``는 디스크의 파일 수, ``unique_samples``는 고유 SHA-256 수다.
 - 매니페스트에 있지만 샘플 디렉터리에 없는 항목은 평가기의 ``missing``으로 보고한다.
 - 평가할 규칙 목록은 규칙 소스에서 읽으므로 한 번도 발화하지 않은 규칙도 결과에 남는다.
 - 샘플은 읽기만 하고 실행하지 않는다.
 
-종료 코드: 0 성공, 1 ``--fail-on-smoke``이고 smoke 확인 실패, 2 입력 오류, 3 출력 오류.
+종료 코드: 0 성공, 1 ``--fail-on-smoke``이고 smoke 확인 실패, 2 입력 오류(읽기 권한 없음 등 ``OSError`` 포함), 3 출력 오류.
 """
 
 from __future__ import annotations
@@ -56,13 +57,26 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def hash_files(directory: Path) -> list[tuple[str, Path]]:
+    """디렉터리의 모든 파일을 정렬 순서로 ``(sha256, 경로)`` 목록으로 만든다(중복 내용 포함)."""
+
+    return [
+        (_sha256_file(path), path)
+        for path in sorted(p for p in directory.rglob("*") if p.is_file())
+    ]
+
+
+def _first_path_by_hash(files: list[tuple[str, Path]]) -> dict[str, Path]:
+    index: dict[str, Path] = {}
+    for sha256, path in files:
+        index.setdefault(sha256, path)
+    return index
+
+
 def index_samples(directory: Path) -> dict[str, Path]:
     """``sha256 -> 경로``. 내용이 같은 파일이 여러 개면 정렬 순서상 첫 경로를 쓴다."""
 
-    index: dict[str, Path] = {}
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
-        index.setdefault(_sha256_file(path), path)
-    return index
+    return _first_path_by_hash(hash_files(directory))
 
 
 def _read_samples(paths: dict[str, Path]) -> Iterator[tuple[str, bytes]]:
@@ -83,7 +97,8 @@ def run(manifest_path: Path, rules_dir: Path, samples_dir: Path) -> dict[str, An
     rules = rule_names_from_source(source)
     engine = YaraXEngine(source)
 
-    index = index_samples(samples_dir)
+    files = hash_files(samples_dir)
+    index = _first_path_by_hash(files)
     wanted = {e.sha256 for e in entries}
     listed = {sha: path for sha, path in index.items() if sha in wanted}
     outcome = scan_samples(engine, _read_samples(listed))
@@ -93,8 +108,10 @@ def run(manifest_path: Path, rules_dir: Path, samples_dir: Path) -> dict[str, An
     report["inputs"] = {
         "manifest_entries": len(entries),
         "rules": sorted(rules),
-        "sample_files": len(index),
-        "unlisted_files": len(index) - len(listed),
+        # 디스크의 파일 수(내용이 같은 파일도 각각 센다)와 고유 SHA-256 수를 따로 둔다.
+        "sample_files": len(files),
+        "unique_samples": len(index),
+        "unlisted_files": sum(1 for sha, _ in files if sha not in wanted),
     }
     report["scan_errors"] = dict(sorted(outcome.errors.items()))
     report["timing"] = {
@@ -121,6 +138,11 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_INPUT_ERROR
     except yara_x.CompileError as exc:
         print(f"error: rule compilation failed: {exc}", file=sys.stderr)
+        return EXIT_INPUT_ERROR
+    except OSError as exc:
+        # 권한 없음 등 읽기 실패. 위의 FileNotFoundError·NotADirectoryError 다음에 둔다.
+        where = f" {exc.filename}" if exc.filename else ""
+        print(f"error: could not read input{where}: {exc.strerror or exc}", file=sys.stderr)
         return EXIT_INPUT_ERROR
 
     output = json.dumps(report, ensure_ascii=False, indent=2)
