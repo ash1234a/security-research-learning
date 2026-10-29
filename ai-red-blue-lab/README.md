@@ -121,6 +121,47 @@ redblue-evaluate --manifest manifest.csv --rules rules --samples /path/to/sample
 - 출력 JSON은 평가기 결과에 `inputs`(매니페스트 항목 수, 규칙 목록, 디스크의 샘플 파일 수 `sample_files`, 고유 SHA-256 수 `unique_samples`, 매니페스트에 없는 파일 수 `unlisted_files`), `scan_errors`, `timing`(총·샘플별 스캔 시간)을 더합니다. 디렉터리에 없는 매니페스트 항목은 `missing`입니다.
 - 종료 코드: `0` 성공, `1` `--fail-on-smoke`일 때 smoke 확인 실패, `2` 입력 오류(매니페스트 형식, 경로, 규칙 컴파일, 읽기 권한 없음 등 `OSError`), `3` 출력 파일 쓰기 실패.
 
+### EMBER 2018 / BODMAS 모델 예측 평가
+
+피처·라벨 데이터셋의 **정답 라벨**과 모델이 **별도로 산출한 예측 점수**를
+SHA-256으로 결합해 기존 평가기의 TP/FP/FN/TN·정밀도·재현율·오탐률을 산출합니다.
+원본 실행 파일은 필요하지 않습니다. 모델을 학습하거나 특징 벡터에서 예측을
+만들어내는 명령은 아니며, 점수는 모델에서 별도로 내보내야 합니다.
+
+추가 의존성(BODMAS의 `npz` 라벨을 읽는 경우만):
+
+```bash
+pip install -e '.[feature-datasets]'
+```
+
+모델 출력 CSV는 다음 **정확한 헤더**를 가집니다(점수는 0~1 악성 확률).
+
+```csv
+sha256,score
+```
+
+EMBER 2018 원본 `train_features_*.jsonl`, `test_features.jsonl` 등은
+`sha256`, `label`(0=정상, 1=악성, -1=미라벨), `avclass`를 읽습니다.
+미라벨(`-1`) 행은 집계에서 제외합니다.
+
+```bash
+redblue-feature-evaluate --dataset ember2018 --metadata data/ember2018/test_features.jsonl --scores model_scores.csv --threshold 0.5 --json results/ember_metrics.json
+```
+
+BODMAS는 공식 원본 `bodmas_metadata.csv`(SHA-256, 최초 관측 시점, 악성코드 계열 3열)와
+`bodmas.npz`의 `y` 라벨을 **같은 행 순서**로 읽습니다. `X` 특징 배열이나 실행 파일은
+읽지 않습니다. 행 개수가 다르면 평가를 중단합니다.
+
+```bash
+redblue-feature-evaluate --dataset bodmas --metadata data/bodmas_metadata.csv --labels-npz data/bodmas.npz --scores model_scores.csv --json results/bodmas_metrics.json
+```
+
+- `model_positive`: 점수가 임계값 이상인 경우만 양성으로 분류합니다. `__any__`는 기존 평가기와 동일한 전체 지표입니다.
+- 매니페스트에 있지만 예측 CSV에 없는 해시는 `missing`으로 표시하며 TN/FN에 포함하지 않습니다.
+- 데이터셋에 없는 해시의 예측은 `inputs.unused_predictions`로 별도 계수합니다.
+- 입력 파일·모델 점수는 GitHub에 커밋하지 않습니다. 합성 데이터만 단위 테스트에 사용합니다.
+- 출처: [EMBER 공식 저장소](https://github.com/elastic/ember), [BODMAS 공식 안내](https://whyisyoung.github.io/BODMAS/).
+
 ## 보고서 예시
 
 ```json
@@ -168,7 +209,7 @@ redblue-evaluate --manifest manifest.csv --rules rules --samples /path/to/sample
 
 1. YARA/YARA-X 탐지 결과 보고서 연결 완료
 2. 테스트용 정상 파일 데이터셋 구성 완료 (pip 내장 정상 PE)
-3. 규칙별 탐지/오탐 평가기 완료 (매니페스트 로더, 규칙 디렉터리 로딩, 샘플별 스캔 시간, `redblue-evaluate` CLI). EMBER/BODMAS 예측 연결은 남음
+3. 규칙별 탐지/오탐 평가기 완료 (매니페스트 로더, 규칙 디렉터리 로딩, 샘플별 스캔 시간, `redblue-evaluate` CLI). EMBER/BODMAS 외부 모델 점수 평가 연결 구현
 4. AI 기반 분석 보고서 및 탐지 규칙 후보 생성
 5. 격리형 블루팀/레드팀 시뮬레이션
 
