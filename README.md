@@ -9,7 +9,7 @@
 
 | 경로 | 내용 |
 | --- | --- |
-| [`ai-red-blue-lab/`](ai-red-blue-lab/) | 정적 분석기 MVP — Windows PE 파일을 실행하지 않고 특징을 추출해 JSON 보고서로 출력 |
+| [`ai-red-blue-lab/`](ai-red-blue-lab/) | 정적 분석기 + YARA-X 탐지·규칙 평가 — Windows PE 파일을 실행하지 않고 특징과 탐지 결과를 JSON으로 출력하고, 라벨된 샘플로 규칙 성능을 측정 |
 | [`reports/port-swigger/`](reports/port-swigger/) | PortSwigger Web Security Academy 실습 리포트 |
 | [`docs/`](docs/) | 프로젝트 계획 및 설계 문서 |
 
@@ -19,10 +19,10 @@
 
 | 단계 | 내용 | 상태 |
 | --- | --- | --- |
-| Phase 0 | 프로젝트 기반 (구조, 의존성, 테스트, CI) | 진행 중 |
-| Phase 1 | 정적 분석기 MVP (해시, 엔트로피, 문자열, PE 파싱, JSON 보고서) | 대부분 완료 |
-| Phase 2 | YARA/YARA-X 탐지 규칙 엔진 | 예정 |
-| Phase 3 | AI 분석 보조 (보고서 요약, 규칙 후보 생성·검증) | 예정 |
+| Phase 0 | 프로젝트 기반 (구조, 의존성, 테스트, CI) | 대부분 완료 |
+| Phase 1 | 정적 분석기 MVP (해시, 엔트로피, 문자열, PE 파싱, JSON 보고서) | 완료 (서명 검증 제외) |
+| Phase 2 | YARA/YARA-X 탐지 규칙 엔진, 규칙 평가기 | 대부분 완료 |
+| Phase 3 | AI 분석 보조 (보고서 요약, 규칙 후보 생성·검증) | 평가 기반만 완료 |
 | Phase 4–7 | 블루팀 자동화, 격리형 레드팀 시뮬레이터, 자동대전, 시각화 | 예정 |
 
 - 사용법: [`ai-red-blue-lab/README.md`](ai-red-blue-lab/README.md)

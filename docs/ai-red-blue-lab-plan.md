@@ -197,6 +197,18 @@ Mean Detect Time: 1.1s
 
 ## 5. 개발 단계
 
+### 진행 현황 (2026-10-29 기준, PR #16까지 반영)
+
+| 단계 | 상태 | 비고 |
+| --- | --- | --- |
+| Phase 0 | 대부분 완료 | JSON Schema 문서, `safety.md`, 라이선스 남음 |
+| Phase 1 | 완료 (서명 검증 제외) | `redblue-analyze` |
+| Phase 2 | 대부분 완료 | YARA-X 연동, 오탐 회귀 테스트, 규칙 평가기·`redblue-evaluate`. 실전 규칙 모음과 실데이터셋 연결 남음 |
+| Phase 3 | 기반만 완료 | 문법 검사·자동 평가 도구는 있음. AI 연동은 미착수 |
+| Phase 4–7 | 미착수 | |
+
+> 번호 정리: PR #14–#16 제목의 "Phase 3"는 규칙 평가 파이프라인(매니페스트, 지표, 평가 CLI)을 가리킨다. 이 문서 기준으로는 Phase 2의 "규칙별 성능 비교"와 Phase 3의 "테스트셋 자동 평가" 기반에 해당하며, 이후 커밋·PR은 이 문서의 Phase 번호를 따른다.
+
 ### Phase 0 — 프로젝트 기반
 
 - [x] Python 프로젝트 구조 생성 (`ai-red-blue-lab/`, `pyproject.toml`)
@@ -235,19 +247,21 @@ redblue-analyze sample.exe --json results/report.json
 
 ### Phase 2 — 탐지 규칙 엔진
 
-- [ ] YARA/YARA-X 연동
-- [ ] 기본 규칙 모음 구성
-- [ ] benign 샘플 대상으로 오탐 시험
-- [ ] 탐지 결과 저장
-- [ ] 규칙별 성능 비교
+- [x] YARA/YARA-X 연동 — `detection/yara_x_engine.py` (#7). 분석기는 `DetectionEngine` 프로토콜에만 의존하고(#12), `RuleMatch`는 엔진 독립 모듈로 분리(#13)
+- [ ] 기본 규칙 모음 구성 — 현재 `rules/`에는 파이프라인 확인용 `EICAR_Smoke_Test`(#8) 하나뿐. 규칙 디렉터리 재귀 로드는 구현됨(#15)
+- [x] benign 샘플 대상으로 오탐 시험 — pip 내장 정상 PE 코퍼스에서 저장소 규칙이 발화하지 않는지 회귀 테스트(#10)
+- [x] 탐지 결과 저장 — 보고서 스키마 v3의 `detections` 필드(미실행·실패 `null` / 일치 없음 `[]` 구분, #11), 평가 결과 JSON(#16)
+- [x] 규칙별 성능 비교 — 매니페스트 로더와 규칙별 TP/FP/FN/TN·precision·recall·정상 파일 오탐률·스캔 시간 계산(#14), `redblue-evaluate` CLI(#16)
+- [ ] `redblue-analyze` CLI에서 규칙 지정 옵션 — 지금은 `analyze_file(..., detection_engine=...)` API로만 탐지를 붙일 수 있음
+- [ ] 실데이터셋 연결 — 매니페스트 `source`에 `ember2018`, `bodmas`가 정의돼 있으나 해당 예측을 평가기에 넣는 경로는 미구현
 
 ### Phase 3 — AI 분석 보조
 
 - [ ] 분석 JSON을 AI에 전달
 - [ ] 자연어 분석 보고서 생성
 - [ ] YARA 규칙 후보 생성
-- [ ] 생성 규칙 문법 검사
-- [ ] 테스트셋 자동 평가
+- [ ] 생성 규칙 문법 검사 — 검사 함수 `validate_rule_source()`는 있음(#7). AI 후보 규칙에 연결하는 작업이 남음
+- [ ] 테스트셋 자동 평가 — 평가 도구 `redblue-evaluate`는 있음(#14–#16). AI 후보 규칙을 자동으로 평가하는 루프가 남음
 - [ ] 성능이 기존보다 나쁠 경우 자동 폐기
 
 AI는 결정자가 아니라 **규칙 후보를 제안하는 분석 보조자**로 둔다.
@@ -293,9 +307,38 @@ AI는 결정자가 아니라 **규칙 후보를 제안하는 분석 보조자**�
 
 ---
 
-## 6. 예상 폴더 구조
+## 6. 폴더 구조
 
 > 현재 설계 문서는 저장소 루트의 `docs/`에 있고, 분석 결과(`results/`)와 샘플(`samples/`)은 `.gitignore`로 커밋 대상에서 제외한다.
+
+### 현재 구조
+
+```text
+ai-red-blue-lab/
+├─ README.md
+├─ pyproject.toml
+├─ analyzer/          # 정적 분석기 (redblue-analyze)
+│  ├─ cli.py
+│  ├─ core.py
+│  ├─ pe_parser.py
+│  ├─ strings.py
+│  └─ entropy.py
+├─ detection/         # 탐지 엔진 추상화와 YARA-X 어댑터
+│  ├─ protocol.py
+│  ├─ types.py
+│  └─ yara_x_engine.py
+├─ evaluation/        # 매니페스트·지표·평가 CLI (redblue-evaluate)
+│  ├─ manifest.py
+│  ├─ evaluator.py
+│  └─ cli.py
+├─ rules/
+│  └─ smoke.yar
+└─ tests/
+```
+
+### 목표 구조 (예정)
+
+규칙 평가기는 처음 계획한 `detection/evaluator.py` 대신 별도 `evaluation/` 패키지로 구현했다. 나머지는 아래 구조를 기준으로 확장한다.
 
 ```text
 ai-red-blue-lab/
@@ -397,6 +440,8 @@ AI가 보고서 요약 및 의심 지점 설명
 ```
 
 여기까지 완성하면 이미 독립적으로 보여줄 수 있는 포트폴리오 결과물이 된다.
+
+현재는 YARA 검사와 JSON 보고서까지 구현했다. 남은 것은 마지막 단계인 AI 요약·설명이다(Phase 3).
 
 그 다음 단계부터 블루팀 자동화 → 안전한 레드팀 시뮬레이터 → 자동대전 순서로 확장한다.
 
